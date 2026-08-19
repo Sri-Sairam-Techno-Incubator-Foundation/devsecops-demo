@@ -1,3 +1,4 @@
+
 name: DevSecOps Security Scan
 
 on:
@@ -21,40 +22,33 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-
       # =========================
       # GitLeaks - Secret Scanning
       # =========================
       - name: Install GitLeaks
         run: |
           GITLEAKS_VERSION="8.24.2"
-
-          curl -sSfL \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            -o /tmp/gitleaks.tar.gz
-
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           chmod +x /tmp/gitleaks
-
           /tmp/gitleaks version
 
       - name: GitLeaks Secret Scan
         run: |
           /tmp/gitleaks detect --source . --no-git
 
-
       # =========================
       # Semgrep - SAST
       # =========================
-      - name: Install Semgrep
+      - name: Create Semgrep Virtual Environment
         run: |
-          python3 -m pip install --user semgrep
+          python3 -m venv /tmp/semgrep-env
+          /tmp/semgrep-env/bin/python -m pip install --upgrade pip
+          /tmp/semgrep-env/bin/pip install semgrep
 
       - name: Semgrep SAST Scan
         run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          semgrep scan --config=auto .
-
+          /tmp/semgrep-env/bin/semgrep scan --config=auto .
 
       # =========================
       # Docker Build
@@ -62,7 +56,6 @@ jobs:
       - name: Build Docker Image
         run: |
           docker build -t devsecops-demo:ci .
-
 
       # =========================
       # Trivy - Container Security
