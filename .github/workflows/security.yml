@@ -16,17 +16,35 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: GitLeaks Secret Scan
-        run: /usr/bin/gitleaks detect --source . --no-git
+      # -------------------------
+      # GitLeaks - Secret Scanning
+      # -------------------------
+      - name: Install GitLeaks
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sh -s -- -b /tmp
 
+      - name: GitLeaks Secret Scan
+        run: |
+          /tmp/gitleaks detect --source . --no-git
+
+      # -------------------------
+      # Semgrep - SAST
+      # -------------------------
       - name: Semgrep SAST Scan
         run: |
           source ~/semgrep-env/bin/activate
           semgrep scan --config=auto .
 
+      # -------------------------
+      # Docker Build
+      # -------------------------
       - name: Build Docker Image
-        run: docker build -t devsecops-demo:ci .
+        run: |
+          docker build -t devsecops-demo:ci .
 
+      # -------------------------
+      # Trivy - Container Scan
+      # -------------------------
       - name: Trivy Container Scan
         run: |
           trivy image \
