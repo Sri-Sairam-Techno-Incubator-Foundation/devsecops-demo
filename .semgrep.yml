@@ -1,0 +1,7 @@
+rules:
+  - id: ignore-csrf-demo
+    pattern: const app = express()
+    languages:
+      - javascript
+    message: "Demo application: CSRF protection is handled by csrf-csrf."
+    severity: INFO
