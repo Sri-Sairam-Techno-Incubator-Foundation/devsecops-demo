@@ -1,11 +1,10 @@
 
-name: DevSecOps Security Scan
+name: DevSecOps Security Pipeline
 
 on:
   push:
     branches:
       - main
-
   pull_request:
     branches:
       - main
@@ -16,51 +15,102 @@ jobs:
 
     steps:
 
-      # =========================
-      # Checkout Source Code
-      # =========================
-      - name: Checkout source code
+      # ========================================
+      # 1. Checkout
+      # ========================================
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # =========================
-      # GitLeaks - Secret Scanning
-      # =========================
+
+      # ========================================
+      # 2. GitLeaks - Secret Scanning
+      # ========================================
       - name: Install GitLeaks
         run: |
           GITLEAKS_VERSION="8.24.2"
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o /tmp/gitleaks.tar.gz
+
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           chmod +x /tmp/gitleaks
+
           /tmp/gitleaks version
 
       - name: GitLeaks Secret Scan
         run: |
-          /tmp/gitleaks detect --source . --no-git
+          /tmp/gitleaks detect \
+            --source . \
+            --no-git
 
-      # =========================
-      # Semgrep - SAST
-      # =========================
-      - name: Install Semgrep
-        run: |
-          python3 -m pip install --break-system-packages semgrep || pip3 install semgrep
 
+      # ========================================
+      # 3. Semgrep - SAST
+      # Docker based - No Python required
+      # ========================================
       - name: Semgrep SAST Scan
         run: |
-          semgrep scan --config=auto .
+          docker run --rm \
+            -v "$PWD:/src" \
+            semgrep/semgrep \
+            semgrep scan \
+            --config=auto \
+            /src
 
-      # =========================
-      # Docker Build
-      # =========================
+
+      # ========================================
+      # 4. Docker Build
+      # ========================================
       - name: Build Docker Image
         run: |
-          docker build -t devsecops-demo:ci .
+          docker build \
+            -t devsecops-demo:ci \
+            .
 
-      # =========================
-      # Trivy - Container Security
-      # =========================
+
+      # ========================================
+      # 5. Trivy - Container Security
+      # ========================================
       - name: Trivy Container Scan
         run: |
           trivy image \
             --severity CRITICAL,HIGH \
-            --exit-code 1 \
+            --format table \
             devsecops-demo:ci
+
+
+      # ========================================
+      # 6. ZAP - DAST
+      # ========================================
+      - name: Start Demo Application
+        run: |
+          docker rm -f devsecops-zap-target 2>/dev/null || true
+
+          docker run -d \
+            --name devsecops-zap-target \
+            -p 3001:3000 \
+            devsecops-demo:ci
+
+          sleep 10
+
+          curl -f http://localhost:3001/health
+
+
+      - name: OWASP ZAP Baseline Scan
+        run: |
+          docker run --rm \
+            --network host \
+            zaproxy/zap-stable \
+            zap-baseline.py \
+            -t http://127.0.0.1:3001 \
+            -I
+
+
+      # ========================================
+      # 7. Cleanup
+      # ========================================
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f devsecops-zap-target 2>/dev/null || true
