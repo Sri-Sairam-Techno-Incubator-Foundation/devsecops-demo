@@ -47,7 +47,6 @@ jobs:
 
       # ========================================
       # 3. Semgrep - SAST
-      # Docker based - No Python required
       # ========================================
       - name: Semgrep SAST Scan
         run: |
@@ -74,14 +73,18 @@ jobs:
       # ========================================
       - name: Trivy Container Scan
         run: |
-          trivy image \
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            aquasec/trivy:latest \
+            image \
             --severity CRITICAL,HIGH \
             --format table \
             devsecops-demo:ci
 
 
       # ========================================
-      # 6. ZAP - DAST
+      # 6. Start Application
       # ========================================
       - name: Start Demo Application
         run: |
@@ -97,6 +100,9 @@ jobs:
           curl -f http://localhost:3001/health
 
 
+      # ========================================
+      # 7. OWASP ZAP - DAST
+      # ========================================
       - name: OWASP ZAP Baseline Scan
         run: |
           docker run --rm \
@@ -108,7 +114,7 @@ jobs:
 
 
       # ========================================
-      # 7. Cleanup
+      # 8. Cleanup
       # ========================================
       - name: Cleanup
         if: always()
