@@ -34,7 +34,6 @@ jobs:
             -o /tmp/gitleaks.tar.gz
 
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
-
           chmod +x /tmp/gitleaks
 
           /tmp/gitleaks version
@@ -47,9 +46,13 @@ jobs:
       # =========================
       # Semgrep - SAST
       # =========================
+      - name: Install Semgrep
+        run: |
+          python3 -m pip install --user semgrep
+
       - name: Semgrep SAST Scan
         run: |
-          source ~/semgrep-env/bin/activate
+          export PATH="$HOME/.local/bin:$PATH"
           semgrep scan --config=auto .
 
 
