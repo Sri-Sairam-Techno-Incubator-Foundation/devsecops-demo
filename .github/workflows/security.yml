@@ -18,7 +18,7 @@ jobs:
 
       - name: GitLeaks Secret Scan
         run: |
-          gitleaks detect --source . --no-git
+       /usr/bin/gitleaks detect --source . --no-git
 
       - name: Semgrep SAST Scan
         run: |
