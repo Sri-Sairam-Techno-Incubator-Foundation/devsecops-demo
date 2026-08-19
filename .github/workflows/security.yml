@@ -40,15 +40,13 @@ jobs:
       # =========================
       # Semgrep - SAST
       # =========================
-      - name: Create Semgrep Virtual Environment
+      - name: Install Semgrep
         run: |
-          python3 -m venv /tmp/semgrep-env
-          /tmp/semgrep-env/bin/python -m pip install --upgrade pip
-          /tmp/semgrep-env/bin/pip install semgrep
+          python3 -m pip install --break-system-packages semgrep || pip3 install semgrep
 
       - name: Semgrep SAST Scan
         run: |
-          /tmp/semgrep-env/bin/semgrep scan --config=auto .
+          semgrep scan --config=auto .
 
       # =========================
       # Docker Build
