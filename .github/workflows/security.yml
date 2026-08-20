@@ -32,14 +32,9 @@ jobs:
       - name: Install GitLeaks
         run: |
           GITLEAKS_VERSION="8.24.2"
-
-          curl -sSfL \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            -o /tmp/gitleaks.tar.gz
-
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           chmod +x /tmp/gitleaks
-
           /tmp/gitleaks version
 
       - name: GitLeaks Secret Scan
@@ -71,13 +66,11 @@ jobs:
       # ========================================
       - name: Build Docker Image
         run: |
-          docker build \
-            -t devsecops-demo:ci \
-            .
+          docker build -t devsecops-demo:ci .
 
 
       # ========================================
-      # 5. Trivy - Container Security Gate
+      # 5. Trivy - Security Gate
       # ========================================
       - name: Trivy Container Security Gate
         run: |
@@ -95,28 +88,7 @@ jobs:
 
 
       # ========================================
-      # 6. Push Image to GitHub Container Registry
-      # ========================================
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Tag Docker Image
-        run: |
-          docker tag devsecops-demo:ci \
-            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:latest
-
-      - name: Push Docker Image to GHCR
-        run: |
-          docker push \
-            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:latest
-
-
-      # ========================================
-      # 7. Start Demo Application
+      # 6. Start Application for ZAP
       # ========================================
       - name: Start Demo Application
         run: |
@@ -133,7 +105,7 @@ jobs:
 
 
       # ========================================
-      # 8. OWASP ZAP - DAST
+      # 7. OWASP ZAP - DAST
       # ========================================
       - name: OWASP ZAP Baseline Scan
         run: |
@@ -148,7 +120,7 @@ jobs:
 
 
       # ========================================
-      # 9. Upload Security Reports
+      # 8. Upload Security Reports
       # ========================================
       - name: Upload Security Reports
         if: always()
@@ -164,7 +136,65 @@ jobs:
 
 
       # ========================================
-      # 10. Cleanup
+      # 9. Login to GHCR
+      # ========================================
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+
+      # ========================================
+      # 10. Tag Docker Image
+      # ========================================
+      - name: Tag Docker Image
+        run: |
+          docker tag devsecops-demo:ci \
+            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:latest
+
+
+      # ========================================
+      # 11. Push Image to GHCR
+      # ========================================
+      - name: Push Docker Image to GHCR
+        run: |
+          docker push \
+            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:latest
+
+
+      # ========================================
+      # 12. Deploy to Proxmox VM
+      # ========================================
+      - name: Deploy to Proxmox VM
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            docker login ghcr.io \
+              -u ${{ github.actor }} \
+              -p ${{ secrets.GITHUB_TOKEN }}
+
+            docker pull ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:latest
+
+            docker rm -f devsecops-demo 2>/dev/null || true
+
+            docker run -d \
+              --name devsecops-demo \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:latest
+
+            sleep 10
+
+            curl -f http://localhost:3000/health
+
+
+      # ========================================
+      # 13. Cleanup
       # ========================================
       - name: Cleanup
         if: always()
