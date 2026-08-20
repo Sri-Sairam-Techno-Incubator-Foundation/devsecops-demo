@@ -14,22 +14,41 @@ jobs:
 
     steps:
 
+      # ========================================
+      # 1. Checkout
+      # ========================================
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # GitLeaks - Secret Scanning
+
+      # ========================================
+      # 2. GitLeaks - Secret Scanning
+      # ========================================
       - name: Install GitLeaks
         run: |
           GITLEAKS_VERSION="8.24.2"
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o /tmp/gitleaks.tar.gz
+
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           chmod +x /tmp/gitleaks
+
           /tmp/gitleaks version
 
       - name: GitLeaks Secret Scan
-        run: /tmp/gitleaks detect --source . --no-git
+        run: |
+          /tmp/gitleaks detect \
+            --source . \
+            --no-git \
+            --report-format json \
+            --report-path gitleaks-report.json
 
-      # Semgrep - SAST
+
+      # ========================================
+      # 3. Semgrep - SAST
+      # ========================================
       - name: Semgrep SAST Scan
         run: |
           docker run --rm \
@@ -37,44 +56,90 @@ jobs:
             semgrep/semgrep \
             semgrep scan \
             --config=auto \
+            --json \
+            --output /src/semgrep-report.json \
             /src
 
-      # Docker Build
-      - name: Build Docker Image
-        run: docker build -t devsecops-demo:ci .
 
-      # Trivy - Security Gate
+      # ========================================
+      # 4. Docker Build
+      # ========================================
+      - name: Build Docker Image
+        run: |
+          docker build \
+            -t devsecops-demo:ci \
+            .
+
+
+      # ========================================
+      # 5. Trivy - Container Security Gate
+      # ========================================
       - name: Trivy Container Security Gate
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            -v "$PWD:/work" \
             aquasec/trivy:latest \
             image \
             --severity CRITICAL \
             --exit-code 1 \
-            --format table \
+            --format json \
+            --output /work/trivy-report.json \
             devsecops-demo:ci
 
-      # Start Application
+
+      # ========================================
+      # 6. Start Application
+      # ========================================
       - name: Start Demo Application
         run: |
           docker rm -f devsecops-zap-target 2>/dev/null || true
-          docker run -d --name devsecops-zap-target -p 3001:3000 devsecops-demo:ci
+
+          docker run -d \
+            --name devsecops-zap-target \
+            -p 3001:3000 \
+            devsecops-demo:ci
+
           sleep 10
+
           curl -f http://localhost:3001/health
 
-      # OWASP ZAP - DAST
+
+      # ========================================
+      # 7. OWASP ZAP - DAST
+      # ========================================
       - name: OWASP ZAP Baseline Scan
         run: |
           docker run --rm \
             --network host \
+            -v "$PWD:/zap/wrk:rw" \
             zaproxy/zap-stable \
             zap-baseline.py \
             -t http://127.0.0.1:3001 \
+            -r zap-report.html \
             -I
 
-      # Cleanup
+
+      # ========================================
+      # 8. Upload Security Reports
+      # ========================================
+      - name: Upload Security Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            gitleaks-report.json
+            semgrep-report.json
+            trivy-report.json
+            zap-report.html
+          if-no-files-found: ignore
+
+
+      # ========================================
+      # 9. Cleanup
+      # ========================================
       - name: Cleanup
         if: always()
         run: |
