@@ -77,7 +77,7 @@ jobs:
 
 
       # ========================================
-      # 5. Trivy - Container Security Gate
+      # 5. Trivy - Container Security
       # ========================================
       - name: Trivy Container Security Gate
         run: |
@@ -158,13 +158,15 @@ jobs:
       # ========================================
       - name: Tag Docker Images
         run: |
-          docker tag \
-            devsecops-demo:ci \
-            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:latest
+          IMAGE="ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo"
 
           docker tag \
             devsecops-demo:ci \
-            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:${{ github.sha }}
+            ${IMAGE}:latest
+
+          docker tag \
+            devsecops-demo:ci \
+            ${IMAGE}:${{ github.sha }}
 
 
       # ========================================
@@ -172,54 +174,188 @@ jobs:
       # ========================================
       - name: Push Docker Images to GHCR
         run: |
-          docker push \
-            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:latest
+          IMAGE="ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo"
 
-          docker push \
-            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:${{ github.sha }}
+          docker push ${IMAGE}:latest
+
+          docker push ${IMAGE}:${{ github.sha }}
 
 
       # ========================================
-      # 12. Automated Deployment
+      # 12. Automated Deployment + Rollback
       # ========================================
       - name: Deploy Application
         run: |
-          echo "Starting deployment..."
+          set -e
 
+          IMAGE="ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo"
+          NEW_IMAGE="${IMAGE}:${{ github.sha }}"
+
+          echo "========================================"
+          echo "Starting deployment"
+          echo "New image: ${NEW_IMAGE}"
+          echo "========================================"
+
+          # ----------------------------------------
+          # Login to GHCR
+          # ----------------------------------------
           docker login ghcr.io \
             -u "${{ github.actor }}" \
             -p "${{ secrets.GITHUB_TOKEN }}"
 
-          echo "Pulling versioned image..."
+          # ----------------------------------------
+          # Pull new version
+          # ----------------------------------------
+          echo "Pulling new image..."
 
-          docker pull \
-            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:${{ github.sha }}
+          docker pull "${NEW_IMAGE}"
 
+          # ----------------------------------------
+          # Detect currently running version
+          # ----------------------------------------
+          PREVIOUS_IMAGE=""
+
+          if docker ps --format '{{.Names}}' | grep -q '^devsecops-demo$'; then
+
+            PREVIOUS_IMAGE=$(docker inspect \
+              --format='{{.Config.Image}}' \
+              devsecops-demo)
+
+            echo "Previous image:"
+            echo "${PREVIOUS_IMAGE}"
+
+          else
+
+            echo "No previous deployment found."
+
+          fi
+
+          # ----------------------------------------
+          # Stop old container
+          # ----------------------------------------
           echo "Stopping old container..."
 
           docker rm -f devsecops-demo 2>/dev/null || true
 
+          # ----------------------------------------
+          # Start new container
+          # ----------------------------------------
           echo "Starting new container..."
 
           docker run -d \
             --name devsecops-demo \
             --restart unless-stopped \
             -p 3000:3000 \
-            ghcr.io/sri-sairam-techno-incubator-foundation/devsecops-demo:${{ github.sha }}
+            "${NEW_IMAGE}"
 
           echo "Waiting for application..."
-
           sleep 10
 
+          # ----------------------------------------
+          # Health Check
+          # ----------------------------------------
           echo "Running health check..."
 
-          curl -f http://localhost:3000/health
+          if curl -f --max-time 10 http://localhost:3000/health; then
 
-          echo "Deployment successful!"
+            echo ""
+            echo "========================================"
+            echo "DEPLOYMENT SUCCESSFUL"
+            echo "Health check passed."
+            echo "========================================"
+
+          else
+
+            echo ""
+            echo "========================================"
+            echo "NEW DEPLOYMENT FAILED"
+            echo "Starting automatic rollback..."
+            echo "========================================"
+
+            # ----------------------------------------
+            # Remove failed deployment
+            # ----------------------------------------
+            docker rm -f devsecops-demo 2>/dev/null || true
+
+            # ----------------------------------------
+            # Rollback
+            # ----------------------------------------
+            if [ -n "${PREVIOUS_IMAGE}" ]; then
+
+              echo "Rolling back to:"
+              echo "${PREVIOUS_IMAGE}"
+
+              docker pull "${PREVIOUS_IMAGE}"
+
+              docker run -d \
+                --name devsecops-demo \
+                --restart unless-stopped \
+                -p 3000:3000 \
+                "${PREVIOUS_IMAGE}"
+
+              echo "Waiting for rollback..."
+              sleep 10
+
+              echo "Checking rollback health..."
+
+              if curl -f --max-time 10 http://localhost:3000/health; then
+
+                echo ""
+                echo "========================================"
+                echo "ROLLBACK SUCCESSFUL"
+                echo "Previous version restored."
+                echo "========================================"
+
+              else
+
+                echo ""
+                echo "========================================"
+                echo "ROLLBACK FAILED"
+                echo "Manual intervention required."
+                echo "========================================"
+
+                exit 1
+
+              fi
+
+            else
+
+              echo "No previous image available for rollback."
+
+              exit 1
+
+            fi
+
+            # New deployment failed
+            exit 1
+
+          fi
 
 
       # ========================================
-      # 13. Cleanup
+      # 13. Final Deployment Verification
+      # ========================================
+      - name: Final Deployment Verification
+        run: |
+          echo "Checking running container..."
+
+          docker ps --filter "name=devsecops-demo"
+
+          echo ""
+          echo "Application health:"
+
+          curl -f http://localhost:3000/health
+
+          echo ""
+          echo "Running image:"
+
+          docker inspect \
+            --format='{{.Config.Image}}' \
+            devsecops-demo
+
+
+      # ========================================
+      # 14. Cleanup
       # ========================================
       - name: Cleanup
         if: always()
