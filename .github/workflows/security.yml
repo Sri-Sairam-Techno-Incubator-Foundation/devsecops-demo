@@ -70,17 +70,22 @@ jobs:
 
       # ========================================
       # 5. Trivy - Container Security
-      # ========================================
-      - name: Trivy Container Scan
+
+               - name: Trivy Container Security Gate
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$HOME/.cache/trivy:/root/.cache/trivy" \
             aquasec/trivy:latest \
             image \
-            --severity CRITICAL,HIGH \
+            --severity CRITICAL \
+            --exit-code 1 \
             --format table \
             devsecops-demo:ci
+
+
+
+
 
 
       # ========================================
