@@ -1,4 +1,3 @@
-
 name: DevSecOps Security Pipeline
 
 on:
@@ -15,39 +14,22 @@ jobs:
 
     steps:
 
-      # ========================================
-      # 1. Checkout
-      # ========================================
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-
-      # ========================================
-      # 2. GitLeaks - Secret Scanning
-      # ========================================
+      # GitLeaks - Secret Scanning
       - name: Install GitLeaks
         run: |
           GITLEAKS_VERSION="8.24.2"
-
-          curl -sSfL \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            -o /tmp/gitleaks.tar.gz
-
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           chmod +x /tmp/gitleaks
-
           /tmp/gitleaks version
 
       - name: GitLeaks Secret Scan
-        run: |
-          /tmp/gitleaks detect \
-            --source . \
-            --no-git
+        run: /tmp/gitleaks detect --source . --no-git
 
-
-      # ========================================
-      # 3. Semgrep - SAST
-      # ========================================
+      # Semgrep - SAST
       - name: Semgrep SAST Scan
         run: |
           docker run --rm \
@@ -57,21 +39,12 @@ jobs:
             --config=auto \
             /src
 
-
-      # ========================================
-      # 4. Docker Build
-      # ========================================
+      # Docker Build
       - name: Build Docker Image
-        run: |
-          docker build \
-            -t devsecops-demo:ci \
-            .
+        run: docker build -t devsecops-demo:ci .
 
-
-      # ========================================
-      # 5. Trivy - Container Security
-
-               - name: Trivy Container Security Gate
+      # Trivy - Security Gate
+      - name: Trivy Container Security Gate
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
@@ -83,31 +56,15 @@ jobs:
             --format table \
             devsecops-demo:ci
 
-
-
-
-
-
-      # ========================================
-      # 6. Start Application
-      # ========================================
+      # Start Application
       - name: Start Demo Application
         run: |
           docker rm -f devsecops-zap-target 2>/dev/null || true
-
-          docker run -d \
-            --name devsecops-zap-target \
-            -p 3001:3000 \
-            devsecops-demo:ci
-
+          docker run -d --name devsecops-zap-target -p 3001:3000 devsecops-demo:ci
           sleep 10
-
           curl -f http://localhost:3001/health
 
-
-      # ========================================
-      # 7. OWASP ZAP - DAST
-      # ========================================
+      # OWASP ZAP - DAST
       - name: OWASP ZAP Baseline Scan
         run: |
           docker run --rm \
@@ -117,10 +74,7 @@ jobs:
             -t http://127.0.0.1:3001 \
             -I
 
-
-      # ========================================
-      # 8. Cleanup
-      # ========================================
+      # Cleanup
       - name: Cleanup
         if: always()
         run: |
