@@ -1,0 +1,35 @@
+name: Checkov IaC Security Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  checkov:
+    name: Checkov IaC Security Scan
+    runs-on: [self-hosted, Linux, X64]
+
+    steps:
+
+      # ========================================
+      # 1. Checkout
+      # ========================================
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+
+      # ========================================
+      # 2. Checkov Scan
+      # ========================================
+      - name: Run Checkov
+        run: |
+          docker run --rm \
+            -v "$PWD:/tf" \
+            bridgecrew/checkov \
+            -d /tf/terraform \
+            --framework terraform
