@@ -1,0 +1,45 @@
+name: Hadolint Dockerfile Security Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  hadolint:
+    name: Hadolint Dockerfile Scan
+    runs-on: [self-hosted, Linux, X64]
+
+    steps:
+
+      # ========================================
+      # 1. Checkout
+      # ========================================
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # ========================================
+      # 2. Check Dockerfile
+      # ========================================
+      - name: Check Dockerfile Exists
+        run: |
+          if [ ! -f Dockerfile ]; then
+            echo "Dockerfile not found!"
+            exit 1
+          fi
+
+          echo "Dockerfile found."
+
+      # ========================================
+      # 3. Hadolint Scan
+      # ========================================
+      - name: Run Hadolint
+        run: |
+          docker run --rm \
+            -i \
+            hadolint/hadolint:latest \
+            < Dockerfile
