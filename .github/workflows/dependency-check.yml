@@ -1,0 +1,50 @@
+name: Dependency Security Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: [self-hosted, Linux, X64]
+
+    steps:
+
+      # ========================================
+      # 1. Checkout
+      # ========================================
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # ========================================
+      # 2. OWASP Dependency Check
+      # ========================================
+      - name: Run OWASP Dependency Check
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            -v "$HOME/.dependency-check-data:/usr/share/dependency-check/data" \
+            owasp/dependency-check:latest \
+            --scan /src \
+            --format JSON \
+            --format HTML \
+            --out /src/dependency-check-report \
+            --project "devsecops-demo" \
+            --failOnCVSS 7
+
+      # ========================================
+      # 3. Upload Report
+      # ========================================
+      - name: Upload Dependency Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: dependency-check-report/
+          if-no-files-found: ignore
